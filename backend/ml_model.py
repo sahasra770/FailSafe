@@ -154,8 +154,7 @@ class MLModel:
 # ─────────────────────────────────────────────────────────────────────────────
 # singleton used by FastAPI routers
 # ─────────────────────────────────────────────────────────────────────────────
-prediction_service = MLModel()
-
-
-if __name__ == "__main__":
+if not os.path.exists(MODEL_PATH):
     train()
+
+prediction_service = MLModel()

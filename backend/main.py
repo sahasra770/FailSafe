@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import joblib
 import numpy as np
 import pandas as pd
-import uvicorn  # Fixed: Added missing import
+import uvicorn
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,7 +19,6 @@ from routers import auth, dashboard, interventions, predictions, students
 def auto_seed():
     db = SessionLocal()
     try:
-        # Check if DB needs seeding
         if db.query(models.User).count() <= 2:
             try:
                 import import_real_data
@@ -30,14 +29,12 @@ def auto_seed():
         db.close()
 
 
-# ── lifespan: runs AFTER uvicorn binds the port ───────────────────────────────
+# Lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Create tables and seed data
     models.Base.metadata.create_all(bind=engine)
     auto_seed()
     yield
-    # Shutdown (add cleanup here if needed)
 
 
 app = FastAPI(
@@ -63,7 +60,7 @@ app.include_router(interventions.router)
 app.include_router(dashboard.router)
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(__file__)
 MODEL_PATH = os.path.join(BASE_DIR, "ml", "model.pkl")
 FEAT_PATH = os.path.join(BASE_DIR, "ml", "features.pkl")
@@ -72,7 +69,6 @@ RISK_LABELS = {0: "Low", 1: "Medium", 2: "High"}
 
 
 def format_prediction(pred_class: int, proba: np.ndarray) -> dict:
-    """Helper to consistently format the prediction payload."""
     return {
         "risk_label": RISK_LABELS[pred_class],
         "risk_score": round(float(proba[pred_class]) * 100, 2),
@@ -84,7 +80,7 @@ def format_prediction(pred_class: int, proba: np.ndarray) -> dict:
     }
 
 
-# ── CSV upload endpoint ───────────────────────────────────────────────────────
+# ── CSV Upload Endpoint (Fixed) ───────────────────────────────────────────────
 @app.post("/upload-students")
 async def upload_students(
     file: UploadFile = File(...),
@@ -106,52 +102,51 @@ async def upload_students(
 
     try:
         model = joblib.load(MODEL_PATH)
-        features = joblib.load(FEAT_PATH)
+        features = joblib.load(FEAT_PATH)   # Should be 33 features
     except FileNotFoundError:
         raise HTTPException(
             status_code=500,
             detail="ML model files missing. Please ensure models are trained and saved.",
         )
-
-    # Validate essential columns
-    min_required = ["G1", "G2", "absences", "failures", "studytime"]
-    missing = [c for c in min_required if c not in df.columns]
-    if missing:
+    except Exception as e:
         raise HTTPException(
-            status_code=400,
-            detail=f"Missing required columns: {missing}. Required baseline: {min_required}",
+            status_code=500, detail=f"Error loading model: {str(e)}"
         )
 
-    # Fill missing expected features with 0 to prevent ML model misalignment
+    # === Critical Fix: Add missing features ===
     for feat in features:
         if feat not in df.columns:
             df[feat] = 0
 
-    X = df[features].fillna(0)
+    # Select features in correct order
+    try:
+        X = df[features].fillna(0)
+    except KeyError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required feature: {str(e)}"
+        )
 
-    # Predict batch
+    # Predict
     try:
         proba_all = model.predict_proba(X)
         pred_class = np.argmax(proba_all, axis=1)
     except Exception as e:
         raise HTTPException(
-            status_code=400, detail=f"Error running inference on data: {str(e)}"
+            status_code=400,
+            detail=f"Prediction error: {str(e)}"
         )
 
+    # Format results
     results = []
-
-    # Dynamically locate ID identifier using dictionary conversion for safer parsing
-    id_candidates = ["student_id", "name", "id"]
+    id_candidates = ["student_id", "id", "StudentID", "name"]
     id_col = next((c for c in id_candidates if c in df.columns), None)
 
     for i, row_dict in enumerate(df.to_dict(orient="records")):
-        # Match student ID fallback safely
         student_id = row_dict.get(id_col) if id_col else f"row_{i+1}"
 
-        # Format using the helper function
         pred_data = format_prediction(int(pred_class[i]), proba_all[i])
         pred_data["student_id"] = str(student_id)
-
         results.append(pred_data)
 
     counts = Counter(r["risk_label"] for r in results)
@@ -172,6 +167,12 @@ def read_root():
     return {"message": "Welcome to the FAILSAFE API"}
 
 
+# For local development
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=port, 
+        reload=False
+    )

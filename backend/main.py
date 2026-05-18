@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import models
 from database import engine, SessionLocal
 from routers import auth, students, predictions, interventions, dashboard
@@ -10,25 +11,35 @@ import io
 import joblib
 import os
 
-# Create database tables
-models.Base.metadata.create_all(bind=engine)
 
 def auto_seed():
     db = SessionLocal()
-    if db.query(models.User).count() <= 2:
-        try:
-            import import_real_data
-            import_real_data.seed()
-        except Exception as e:
-            print(f"Seed error: {e}")
-    db.close()
+    try:
+        if db.query(models.User).count() <= 2:
+            try:
+                import import_real_data
+                import_real_data.seed()
+            except Exception as e:
+                print(f"Seed error: {e}")
+    finally:
+        db.close()
 
-auto_seed()
+
+# ── lifespan: runs AFTER uvicorn binds the port ───────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    models.Base.metadata.create_all(bind=engine)
+    auto_seed()
+    yield
+    # Shutdown (add cleanup here if needed)
+
 
 app = FastAPI(
     title="FAILSAFE API",
     description="Student failure prediction and intervention system",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -71,15 +82,6 @@ async def upload_students(
     file: UploadFile = File(...),
     current_user: models.User = Depends(get_current_user)
 ):
-    """
-    Faculty uploads a CSV. The endpoint runs XGBoost predictions and
-    returns per-student risk levels (Low / Medium / High).
-
-    Required columns: G1, G2, absences, failures, studytime
-    Optional but recommended: Medu, Fedu, goout, Dalc, Walc, health,
-                              famrel, freetime, traveltime, age
-    A 'student_id' or 'name' column is used for identification if present.
-    """
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only .csv files are accepted.")
 
@@ -89,32 +91,28 @@ async def upload_students(
     except Exception:
         raise HTTPException(status_code=400, detail="Could not parse CSV. Make sure it is UTF-8 encoded.")
 
-    # Load model + feature list
     try:
         model    = joblib.load(MODEL_PATH)
         features = joblib.load(FEAT_PATH)
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="ML model not found. Please retrain first.")
 
-    # Check minimum required columns
     min_required = ["G1", "G2", "absences", "failures", "studytime"]
     missing = [c for c in min_required if c not in df.columns]
     if missing:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing required columns: {missing}. "
-                   f"Required: {min_required}"
+            detail=f"Missing required columns: {missing}. Required: {min_required}"
         )
 
-    # Fill any missing optional feature columns with 0
     for feat in features:
         if feat not in df.columns:
             df[feat] = 0
 
     X = df[features].fillna(0)
 
-    proba_all  = model.predict_proba(X)          # shape (n_students, 3)
-    pred_class = np.argmax(proba_all, axis=1)    # 0/1/2
+    proba_all  = model.predict_proba(X)
+    pred_class = np.argmax(proba_all, axis=1)
 
     results = []
     id_col = next((c for c in ["student_id", "name", "id"] if c in df.columns), None)
@@ -134,7 +132,6 @@ async def upload_students(
             }
         })
 
-    # Summary counts
     from collections import Counter
     counts = Counter(r["risk_label"] for r in results)
 
@@ -152,6 +149,8 @@ async def upload_students(
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the FAILSAFE API"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

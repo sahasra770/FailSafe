@@ -6,6 +6,16 @@ from routers import auth, students, predictions, interventions, dashboard
 
 # Create database tables
 models.Base.metadata.create_all(bind=engine)
+# Auto-seed if database is empty
+from database import SessionLocal
+def auto_seed():
+    db = SessionLocal()
+    if db.query(models.User).count() == 0:
+        import seed
+        seed.seed_db()
+    db.close()
+
+auto_seed()
 
 app = FastAPI(
     title="FAILSAFE API",

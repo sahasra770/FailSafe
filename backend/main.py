@@ -4,6 +4,7 @@ import models
 from database import engine, SessionLocal
 from routers import auth, students, predictions, interventions, dashboard
 from auth import get_current_user
+import pandas as pd
 import numpy as np
 import io
 import joblib

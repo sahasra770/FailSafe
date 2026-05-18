@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL =  'https://failsafe-zxr3.onrender.com';
+const API_URL = 'https://failsafe-zxr3.onrender.com';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -37,14 +37,6 @@ export const studentAPI = {
   },
   getHistory: async (studentId) => {
     const res = await api.get(`/predict/${studentId}/history`);
-    return res.data;
-  },
-  uploadCSV: async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await api.post('/upload-students', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
     return res.data;
   }
 };

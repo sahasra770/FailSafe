@@ -15,7 +15,8 @@ class UserResponse(BaseModel):
     email: str
     role: str
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 # Token Schemas
 class Token(BaseModel):
@@ -42,7 +43,8 @@ class StudentResponse(StudentBase):
     user_id: int
     user: UserResponse
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 # Prediction Schemas
 class PredictionResponse(BaseModel):
@@ -53,7 +55,8 @@ class PredictionResponse(BaseModel):
     predicted_on: datetime
     shap_values: Dict[str, Any]
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True
 
 # Intervention Schemas
 class InterventionCreate(BaseModel):
@@ -72,4 +75,5 @@ class InterventionResponse(BaseModel):
     assigned_by: int
     status: str
 
-    model_config = {"from_attributes": True}
+    class Config:
+        orm_mode = True

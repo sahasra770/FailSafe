@@ -43,7 +43,7 @@ def seed():
 
     # Load real UCI data (first 50 rows for demo)
     df = pd.read_csv("processed_student_data.csv")
-    df = df.head(395)
+    df = df
 
     random.seed(42)
     used_emails = set()

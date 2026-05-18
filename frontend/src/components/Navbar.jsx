@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Activity, LogOut, LayoutDashboard, User } from 'lucide-react';
@@ -29,6 +31,15 @@ const Navbar = () => {
             onClick={(e) => { e.preventDefault(); navigate('/faculty'); }}
           >
             <LayoutDashboard size={18} /> Dashboard
+          </a>
+        )}
+        {role === 'faculty' && (
+          <a
+            href="/upload"
+            className={location.pathname === '/upload' ? 'active' : ''}
+            onClick={(e) => { e.preventDefault(); navigate('/upload'); }}
+          >
+            📂 Upload Data
           </a>
         )}
         {role === 'hod' && (

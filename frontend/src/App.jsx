@@ -5,20 +5,14 @@ import FacultyDashboard from './pages/FacultyDashboard';
 import HODDashboard from './pages/HODDashboard';
 import StudentDetail from './pages/StudentDetail';
 import StudentProfile from './pages/StudentProfile';
+import UploadData from './pages/UploadData';          // NEW
 import Navbar from './components/Navbar';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const token = localStorage.getItem('token');
-  const role = localStorage.getItem('role');
-  
-  if (!token) {
-    return <Navigate to="/" replace />;
-  }
-  
-  if (allowedRoles && !allowedRoles.includes(role)) {
-    return <Navigate to="/" replace />;
-  }
-  
+  const role  = localStorage.getItem('role');
+  if (!token) return <Navigate to="/" replace />;
+  if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/" replace />;
   return children;
 };
 
@@ -34,28 +28,35 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
-        
+
         <Route path="/faculty" element={
           <ProtectedRoute allowedRoles={['faculty']}>
             <AppLayout><FacultyDashboard /></AppLayout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/hod" element={
           <ProtectedRoute allowedRoles={['hod']}>
             <AppLayout><HODDashboard /></AppLayout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/student/:id" element={
           <ProtectedRoute allowedRoles={['faculty', 'hod']}>
             <AppLayout><StudentDetail /></AppLayout>
           </ProtectedRoute>
         } />
-        
+
         <Route path="/my-profile" element={
           <ProtectedRoute allowedRoles={['student']}>
             <AppLayout><StudentProfile /></AppLayout>
+          </ProtectedRoute>
+        } />
+
+        {/* NEW – faculty-only upload page */}
+        <Route path="/upload" element={
+          <ProtectedRoute allowedRoles={['faculty']}>
+            <AppLayout><UploadData /></AppLayout>
           </ProtectedRoute>
         } />
       </Routes>

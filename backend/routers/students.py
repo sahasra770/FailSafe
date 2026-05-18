@@ -28,15 +28,48 @@ def get_student(student_id: int, db: Session = Depends(database.get_db), current
 def upload_students_csv(file: UploadFile = File(...), db: Session = Depends(database.get_db), current_user: models.User = Depends(auth.require_role(["faculty", "hod"]))):
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files allowed")
-    
+
     content = file.file.read()
     df = pd.read_csv(io.BytesIO(content))
+
+    # Load model
+    import joblib, numpy as np, os
+    BASE_DIR   = os.path.dirname(os.path.dirname(__file__))
+    model      = joblib.load(os.path.join(BASE_DIR, "model.pkl"))
+    features   = joblib.load(os.path.join(BASE_DIR, "features.pkl"))
+
+    RISK_LABELS = {0: "Low", 1: "Medium", 2: "High"}
+
+    for feat in features:
+        if feat not in df.columns:
+            df[feat] = 0
+
+    X         = df[features].fillna(0)
+    proba_all = model.predict_proba(X)
+    pred_class = np.argmax(proba_all, axis=1)
+
+    results = []
+    id_col = next((c for c in ["student_id", "name", "id"] if c in df.columns), None)
+    for i in range(len(df)):
+        pc   = int(pred_class[i])
+        prob = proba_all[i]
+        results.append({
+            "student_id":    str(df.iloc[i][id_col]) if id_col else f"row_{i+1}",
+            "risk_label":    RISK_LABELS[pc],
+            "risk_score":    round(float(prob[pc]) * 100, 2),
+            "probabilities": {
+                "Low":    round(float(prob[0]) * 100, 2),
+                "Medium": round(float(prob[1]) * 100, 2),
+                "High":   round(float(prob[2]) * 100, 2),
+            }
+        })
+
+    from collections import Counter
+    counts = Counter(r["risk_label"] for r in results)
+    return {
+        "students_processed": len(results),
+        "summary": {"High": counts.get("High",0), "Medium": counts.get("Medium",0), "Low": counts.get("Low",0)},
+        "predictions": results
+    }
     
-    count = 0
-    # Expected columns: roll_no, name, email, department, semester, cgpa, attendance, assignments
-    # This is a simplified bulk upload that updates or creates students (ignoring passwords for now)
-    for _, row in df.iterrows():
-        # Dummy create or skip for this example
-        pass
     
-    return {"message": f"Successfully processed {len(df)} records (dummy)."}

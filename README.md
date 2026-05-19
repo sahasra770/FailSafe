@@ -260,7 +260,7 @@ backend/model.pkl
 
 # Running the Complete Application
 
-Open two terminals:
+Open two terminals:-
 
 ## Terminal 1 – Backend
 
